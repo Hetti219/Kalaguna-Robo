@@ -22,21 +22,30 @@ load_dotenv()
 TELEGRAM_TOKEN = os.environ.get("BOT_API_TOKEN")
 WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the conversation and ask user to choose an option."""
+    return await show_options_keyboard(update, context, "Welcome to the Weather Bot! I can provide current weather information.\n\n"
+                                       "Please share your location or choose to type a city name.")
+
+
+async def show_options_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE, message_text: str) -> int:
+    """Display the options keyboard with a custom message."""
     keyboard = [
         [KeyboardButton("Share my location", request_location=True)],
         [KeyboardButton("Type a city name")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-    
-    await update.message.reply_text(
-        "Welcome to the Weather Bot! I can provide current weather information.\n\n"
-        "Please share your location or choose to type a city name.",
-        reply_markup=reply_markup
-    )
-    
+
+    await update.message.reply_text(message_text, reply_markup=reply_markup)
+
     return CHOOSING_OPTION
+
+
+async def restart_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Restart the conversation by showing options again."""
+    return await show_options_keyboard(update, context, "What would you like to do next?")
+
 
 async def option_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle user selection to either share location or type city name."""
@@ -45,29 +54,35 @@ async def option_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return TYPING_CITY
     return CHOOSING_OPTION
 
+
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle user shared location and provide weather information."""
     user_location = update.message.location
-    weather_data = get_weather_by_coordinates(user_location.latitude, user_location.longitude)
-    
+    weather_data = get_weather_by_coordinates(
+        user_location.latitude, user_location.longitude)
+
     if weather_data:
         await update.message.reply_text(format_weather_data(weather_data))
     else:
         await update.message.reply_text("Sorry, I couldn't retrieve weather information for your location.")
-    
-    return ConversationHandler.END
+
+    # Return to start state instead of ending conversation
+    return await restart_conversation(update, context)
+
 
 async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle city name input and provide weather information."""
     city_name = update.message.text
     weather_data = get_weather_by_city(city_name)
-    
+
     if weather_data:
         await update.message.reply_text(format_weather_data(weather_data))
     else:
         await update.message.reply_text(f"Sorry, I couldn't find weather information for '{city_name}'.")
-    
-    return ConversationHandler.END
+
+    # Return to start state instead of ending conversation
+    return await restart_conversation(update, context)
+
 
 def get_weather_by_coordinates(latitude: float, longitude: float) -> dict:
     """Get weather data from OpenWeatherMap API using coordinates."""
@@ -80,6 +95,7 @@ def get_weather_by_coordinates(latitude: float, longitude: float) -> dict:
         logger.error(f"Error getting weather by coordinates: {e}")
         return None
 
+
 def get_weather_by_city(city_name: str) -> dict:
     """Get weather data from OpenWeatherMap API using city name."""
     try:
@@ -91,16 +107,18 @@ def get_weather_by_city(city_name: str) -> dict:
         logger.error(f"Error getting weather by city: {e}")
         return None
 
+
 def format_weather_data(weather_data: dict) -> str:
     """Format weather data for user-friendly display."""
     city_name = weather_data["name"]
     country = weather_data["sys"]["country"]
-    weather_description = weather_data["weather"][0]["description"].capitalize()
+    weather_description = weather_data["weather"][0]["description"].capitalize(
+    )
     temperature = weather_data["main"]["temp"]
     feels_like = weather_data["main"]["feels_like"]
     humidity = weather_data["main"]["humidity"]
     wind_speed = weather_data["wind"]["speed"]
-    
+
     return (
         f"📍 Location: {city_name}, {country}\n"
         f"🌤 Weather: {weather_description}\n"
@@ -109,6 +127,7 @@ def format_weather_data(weather_data: dict) -> str:
         f"💧 Humidity: {humidity}%\n"
         f"💨 Wind speed: {wind_speed} m/s"
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
@@ -120,10 +139,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/cancel - Cancel the current operation"
     )
 
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel and end the conversation."""
     await update.message.reply_text("Operation cancelled. Send /start to begin again.")
     return ConversationHandler.END
+
 
 def main() -> None:
     """Start the bot."""
@@ -136,7 +157,8 @@ def main() -> None:
         states={
             CHOOSING_OPTION: [
                 MessageHandler(filters.LOCATION, handle_location),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, option_handler),
+                MessageHandler(filters.TEXT & ~filters.COMMAND,
+                               option_handler),
             ],
             TYPING_CITY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_city),
@@ -150,6 +172,7 @@ def main() -> None:
 
     # Start the Bot
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
