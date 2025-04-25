@@ -32,20 +32,6 @@ No installation is needed to use Kālaguṇa Robō. Simply search for it on Tele
 
 At this time, I am not accepting contributions to the bot. However, feel free to use and share Kālaguṇa Robō!
 
-## 📜 License
-
-Choosing the right license is important for open-source projects. Here are a few common options you might consider:
-
-- **MIT License:** A permissive license that lets others reuse your code in almost any way as long as they provide attribution and don’t hold you liable.
-- **Apache License 2.0:** A permissive license that also includes a patent grant.
-- **GNU General Public License v3.0 (GPLv3):** A copyleft license that requires anyone who distributes your code or derivative works to also make their source code available under the same terms.
-
-You can read more about these licenses and choose the one that best fits your needs here: [https://choosealicense.com/](https://choosealicense.com/)
-
-Once you decide on a license, you can add a section to your `README.md` like this:
-
-```markdown
 ## 📄 License
 
-This project is licensed under the [Your Chosen License] License. See the `LICENSE` file for more information.
-```
+This project is licensed under the [MIT License](LICENSE). See the `LICENSE` file for more information.
