@@ -5,6 +5,7 @@ This bot provides weather information based on user location or city queries.
 import os
 import logging
 import requests
+from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
@@ -19,9 +20,10 @@ logger = logging.getLogger(__name__)
 # States for conversation handler
 CHOOSING_OPTION, TYPING_CITY = range(2)
 
+load_dotenv()
 # Replace with your API keys
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-WEATHER_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
+TELEGRAM_TOKEN = os.environ.get("BOT_API_TOKEN")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -97,27 +99,33 @@ def get_weather_by_coordinates(latitude: float, longitude: float) -> dict:
         # Get air pollution data
         pollution_url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={latitude}&lon={longitude}&appid={WEATHER_API_KEY}"
         pollution_response = requests.get(pollution_url)
-        pollution_response.raise_for_status()
-        pollution_data = pollution_response.json()
+        pollution_data = {}
+        if pollution_response.status_code == 200:
+            pollution_data = pollution_response.json()
 
-        # Get UV index and alerts from One Call API
-        onecall_url = f"https://api.openweathermap.org/data/3.0/onecall?lat={latitude}&lon={longitude}&exclude=minutely,hourly,daily&appid={WEATHER_API_KEY}&units=metric"
+        # Use OneCall API 2.5 instead of 3.0 for UV index
+        # This version is included in the free tier
+        onecall_url = f"https://api.openweathermap.org/data/2.5/onecall?lat={latitude}&lon={longitude}&exclude=minutely,hourly,daily&appid={WEATHER_API_KEY}&units=metric"
         onecall_response = requests.get(onecall_url)
-        onecall_response.raise_for_status()
-        onecall_data = onecall_response.json()
+        onecall_data = {}
+        if onecall_response.status_code == 200:
+            onecall_data = onecall_response.json()
 
-        # Combine all data
+        # Combine all data with appropriate error handling
         combined_data = weather_data
-        combined_data["air_pollution"] = pollution_data["list"][0] if pollution_data.get(
-            "list") else None
+        combined_data["air_pollution"] = pollution_data.get(
+            "list", [{}])[0] if pollution_data.get("list") else None
         combined_data["uvi"] = onecall_data.get("current", {}).get("uvi")
         combined_data["alerts"] = onecall_data.get("alerts", [])
 
         return combined_data
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         logger.error(
             f"Error getting comprehensive weather data by coordinates: {e}")
-        return None
+        return weather_data if 'weather_data' in locals() else None
+    except Exception as e:
+        logger.error(f"Unexpected error in weather data processing: {e}")
+        return weather_data if 'weather_data' in locals() else None
 
 
 def get_weather_by_city(city_name: str) -> dict:
@@ -142,6 +150,9 @@ def get_weather_by_city(city_name: str) -> dict:
 
 def format_weather_data(weather_data: dict) -> str:
     """Format comprehensive weather data for precise, user-friendly display."""
+    if not weather_data:
+        return "Error retrieving weather data. Please try again later."
+
     city_name = weather_data["name"]
     country = weather_data["sys"]["country"]
     weather_description = weather_data["weather"][0]["description"].capitalize(
@@ -169,17 +180,22 @@ def format_weather_data(weather_data: dict) -> str:
 
     # Add Air Quality information if available
     if weather_data.get("air_pollution"):
-        aqi = weather_data["air_pollution"]["main"]["aqi"]
-        air_quality = get_air_quality_description(aqi)
-        formatted_data += f"\n\n🌬 Air Quality: {air_quality}"
+        try:
+            aqi = weather_data["air_pollution"]["main"]["aqi"]
+            air_quality = get_air_quality_description(aqi)
+            formatted_data += f"\n\n🌬 Air Quality: {air_quality}"
 
-        # Add pollutant details
-        components = weather_data["air_pollution"]["components"]
-        formatted_data += (
-            f"\n   - PM2.5: {components.get('pm2_5', 'N/A')} μg/m³"
-            f"\n   - PM10: {components.get('pm10', 'N/A')} μg/m³"
-            f"\n   - NO₂: {components.get('no2', 'N/A')} μg/m³"
-        )
+            # Add pollutant details if available
+            components = weather_data["air_pollution"].get("components", {})
+            if components:
+                formatted_data += (
+                    f"\n   - PM2.5: {components.get('pm2_5', 'N/A')} μg/m³"
+                    f"\n   - PM10: {components.get('pm10', 'N/A')} μg/m³"
+                    f"\n   - NO₂: {components.get('no2', 'N/A')} μg/m³"
+                )
+        except (KeyError, TypeError) as e:
+            logger.error(f"Error formatting air quality data: {e}")
+            # Continue without air quality info
 
     # Add weather alerts if available
     if weather_data.get("alerts") and len(weather_data["alerts"]) > 0:
